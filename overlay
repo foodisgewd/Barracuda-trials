@@ -1,0 +1,90 @@
+import net.runelite.api.Client;
+import net.runelite.api.LocalPoint;
+import net.runelite.api.Point;
+import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.ui.overlay.*;
+
+import javax.inject.Inject;
+import java.awt.*;
+import java.awt.geom.Line2D;
+
+import static net.runelite.client.ui.overlay.OverlayUtil.renderPolygon;
+
+public class BarracudaTrialsOverlay extends Overlay {
+    private final Client client;
+    private final BarracudaTrialsPlugin plugin;
+    private final BarracudaTrialsPlugin.Config config;
+
+    @Inject
+    public BarracudaTrialsOverlay(Client client, BarracudaTrialsPlugin plugin, BarracudaTrialsPlugin.Config config) {
+        this.client = client;
+        this.plugin = plugin;
+        this.config = config;
+        setPosition(OverlayPosition.DYNAMIC);
+        setLayer(OverlayLayer.ABOVE_SCENE);
+        setPriority(OverlayPriority.HIGH);
+    }
+
+    @Override
+    public Dimension render(Graphics2D graphics) {
+        if (!plugin.inTemporTantrum() || !config.showCrates()) {
+            return null;
+        }
+
+        Color fill = new Color(0, 255, 0, 80);
+        Color outline = Color.GREEN;
+        Color text = Color.WHITE;
+        Stroke stroke = new BasicStroke(2);
+
+        int size = config.markerSize();
+
+        WorldPoint prev = null;
+        for (int i = 0; i < BarracudaTrialsPlugin.CRATES.length; i++) {
+            WorldPoint wp = BarracudaTrialsPlugin.CRATES[i];
+            LocalPoint lp = LocalPoint.fromWorld(client, wp);
+            if (lp == null) {
+                continue;
+            }
+
+            // Draw marker
+            Point p = new Point(lp.getX() - size / 2, lp.getY() + size / 2);
+            Polygon poly = new Polygon();
+            poly.addPoint(p.x, p.y);
+            poly.addPoint(p.x, p.y - 2 * size);
+            poly.addPoint(p.x + 2 * size, p.y - 2 * size);
+            poly.addPoint(p.x + 2 * size, p.y);
+            renderPolygon(graphics, poly, fill);
+            graphics.setColor(outline);
+            graphics.setStroke(stroke);
+            graphics.draw(poly);
+
+            // Label
+            if (config.showLabels()) {
+                String label = "#" + (i + 1);
+                Rectangle2D bounds = graphics.getFontMetrics().getStringBounds(label, graphics);
+                int lx = (int) (p.x + size - bounds.getWidth() / 2);
+                int ly = (int) (p.y - size + bounds.getHeight() / 2);
+                graphics.setColor(new Color(0, 0, 0, 150));
+                graphics.fillRoundRect(lx - 2, ly - bounds.getHeight(), (int) bounds.getWidth() + 4, (int) bounds.getHeight() + 2, 3, 3);
+                graphics.setColor(text);
+                graphics.drawString(label, lx, ly);
+            }
+
+            // Path line to next
+            if (config.drawPath() && i < BarracudaTrialsPlugin.CRATES.length - 1) {
+                WorldPoint next = BarracudaTrialsPlugin.CRATES[i + 1];
+                LocalPoint nlp = LocalPoint.fromWorld(client, next);
+                if (nlp != null) {
+                    Point np = new Point(nlp.getX(), nlp.getY());
+                    graphics.setColor(new Color(255, 255, 0, 100));
+                    graphics.setStroke(new BasicStroke(3));
+                    graphics.draw(new Line2D.Float(p.x + size, p.y - size, np.x + size, np.y - size));
+                }
+            }
+
+            prev = wp;
+        }
+
+        return null;
+    }
+}
