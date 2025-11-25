@@ -1,0 +1,138 @@
+import lombok.Getter;
+import net.runelite.api.*;
+import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.config.*;
+import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.overlay.*;
+import net.runelite.client.ui.overlay.components.*;
+
+import javax.inject.Inject;
+import java.awt.*;
+import java.awt.geom.Rectangle2D;
+import java.util.Arrays;
+
+@PluginDescriptor(
+    name = "Barracuda Trials Path Marker",
+    description = "Highlights crate locations and marks the best path for Tempor Tantrum (extendable to others)",
+    tags = {"sailing", "barracuda", "trials", "path", "crates"}
+)
+public class BarracudaTrialsPlugin extends Plugin {
+    @Inject
+    private Client client;
+
+    @Inject
+    private OverlayManager overlayManager;
+
+    @Inject
+    private BarracudaTrialsOverlay overlay;
+
+    @Override
+    protected void startUp() {
+        overlayManager.add(overlay);
+    }
+
+    @Override
+    protected void shutDown() {
+        overlayManager.remove(overlay);
+    }
+
+    @Getter
+    @ConfigGroup("barracudatrials")
+    public static class Config implements Config {
+        @ConfigItem(
+            keyName = "showCrates",
+            name = "Show crate markers",
+            description = "Highlight all 36 crate spawn locations"
+        )
+        default boolean showCrates() { return true; }
+
+        @ConfigItem(
+            keyName = "showLabels",
+            name = "Show numbered labels",
+            description = "Number the crates 1-36 for sequential collection"
+        )
+        default boolean showLabels() { return true; }
+
+        @ConfigItem(
+            keyName = "markerSize",
+            name = "Marker size",
+            description = "Size of the crate markers"
+        )
+        @Range(min = 3, max = 12)
+        @Units(OverlayUtil.RECTANGLE_SIZE_UNIT)
+        default int markerSize() { return 6; }
+
+        @ConfigItem(
+            keyName = "drawPath",
+            name = "Draw path lines",
+            description = "Connect crates sequentially (assumes #1-36 order around course)"
+        )
+        default boolean drawPath() { return true; }
+    }
+
+    private static final int[] TEMPOR_REGIONS = {
+        11819, 11820, 11821, 12075, 12077, 12331, 12332, 12333
+    };
+
+    private static final WorldPoint[] CRATES; // 36 hardcoded from OSRS Wiki JSON
+
+    static {
+        CRATES = new WorldPoint[36];
+        // Computed from wiki Module:Tile_markers/The_Tempor_Tantrum_(box_locations_with_labels).json
+        // Format: regionId, regionX, regionY
+        int[][] data = {
+            {12077, 10, 9},   // #1
+            {11820, 57, 50},  // #2
+            {11820, 60, 18},  // #3
+            {11820, 62, 3},   // #4
+            {12075, 22, 63},  // #5
+            {12075, 20, 37},  // #6
+            {12331, 5, 23},   // #7
+            {12331, 10, 48},  // #8
+            {12332, 21, 19},  // #9
+            {12332, 6, 47},   // #10
+            {12332, 10, 59},  // #11
+            {12077, 51, 24},  // #12
+            {11821, 50, 11},  // #13
+            {11820, 34, 50},  // #14
+            {11820, 37, 32},  // #15
+            {11820, 34, 12},  // #16
+            {11819, 46, 56},  // #17
+            {11819, 57, 36},  // #18
+            {12075, 4, 16},   // #19
+            {12075, 29, 10},  // #20
+            {12075, 49, 40},  // #21
+            {12075, 57, 59},  // #22
+            {12332, 5, 9},    // #23
+            {12077, 52, 2},   // #24
+            {11821, 19, 2},   // #25
+            {11820, 21, 49},  // #26
+            {11820, 13, 13},  // #27
+            {11819, 9, 57},   // #28
+            {11819, 22, 43},  // #29
+            {11819, 43, 25},  // #30
+            {12331, 23, 23},  // #31
+            {12332, 47, 39},  // #32
+            {12333, 21, 2},   // #33
+            {12333, 12, 16},  // #34
+            {12333, 7, 26},   // #35
+            {12077, 45, 40}   // #36
+        };
+
+        for (int i = 0; i < 36; i++) {
+            int regionId = data[i][0];
+            int rx = data[i][1];
+            int ry = data[i][2];
+            int baseX = (regionId & 0xFF) * 64 + rx;
+            int baseY = (regionId >>> 8) * 64 + ry;
+            CRATES[i] = new WorldPoint(baseX, baseY, 0);
+        }
+    }
+
+    private boolean inTemporTantrum() {
+        int[] regions = client.getMapRegions();
+        return Arrays.stream(regions).anyMatch(r -> Arrays.binarySearch(TEMPOR_REGIONS, r) >= 0);
+    }
+}
